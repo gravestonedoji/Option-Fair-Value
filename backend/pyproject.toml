@@ -1,0 +1,37 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "option-fair-value-backend"
+version = "0.1.0"
+description = "Option fair value dashboard backend: pricing math (BS, binomial, Monte Carlo, fair-value ranges, Greeks), market data (yfinance, FRED), and FastAPI routes."
+requires-python = ">=3.10"
+dependencies = [
+    "numpy>=1.26",
+    "scipy>=1.11",
+    "pydantic>=2",
+    "fastapi>=0.110",
+    "uvicorn[standard]>=0.30",
+    "yfinance>=0.2.40",
+    "httpx>=0.27",
+    "pandas>=2.0",
+    "python-dotenv>=1.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7",
+    "pytest-cov",
+    "pytest-asyncio>=0.23",
+    "httpx>=0.27",
+]
+
+[tool.setuptools]
+packages = ["app", "app.pricing", "app.data", "app.api"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
+addopts = "-v"
+asyncio_mode = "strict"
