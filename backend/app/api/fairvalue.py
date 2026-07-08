@@ -1,10 +1,15 @@
 from __future__ import annotations
 
+import asyncio
 import logging
-from datetime import date, datetime, timezone
+import os
+from datetime import date, datetime
 from statistics import median
+from zoneinfo import ZoneInfo
 
 from fastapi import APIRouter, HTTPException, Request
+
+from .limits import RATE_LIMIT_FAIRVALUE, limiter
 
 from app.data.models import DataError
 from app.data.yfinance_client import YFinanceClient
@@ -34,12 +39,22 @@ _SEED = 42
 _N_LHS = 200
 _MC_PATHS = 50_000
 _FALLBACK_IV = 0.30
+# US options expire on the market's calendar day; gating on the UTC date
+# would reject the front expiry from 8pm ET onward while it still trades.
+_MARKET_TZ = ZoneInfo("America/New_York")
+
+# Each computation burns ~1-2s of CPU (10M Monte Carlo sims); cap how many run
+# at once so a burst of requests degrades to queueing instead of thrashing.
+_PRICING_SEMAPHORE = asyncio.Semaphore(
+    int(os.environ.get("OFV_MAX_CONCURRENT_PRICING", "2"))
+)
 
 
 @router.post("/fairvalue", response_model=FairValueRange)
+@limiter.limit(RATE_LIMIT_FAIRVALUE)
 async def compute_fair_value(req: FairValueRequest, request: Request) -> FairValueRange:
     symbol = req.symbol.upper().strip()
-    today = datetime.now(timezone.utc).date()
+    today = datetime.now(_MARKET_TZ).date()
     dte_days = (req.expiry - today).days
     if dte_days <= 0:
         raise HTTPException(
@@ -95,13 +110,17 @@ async def compute_fair_value(req: FairValueRequest, request: Request) -> FairVal
     )
 
     try:
-        fvr = compute_fair_value_range(
-            pricing_inputs,
-            bands,
-            n_lhs=_N_LHS,
-            mc_paths=_MC_PATHS,
-            seed=_SEED,
-        )
+        # numpy-heavy and synchronous: run in a worker thread so the event loop
+        # stays responsive, and gate on the semaphore to bound CPU load.
+        async with _PRICING_SEMAPHORE:
+            fvr = await asyncio.to_thread(
+                compute_fair_value_range,
+                pricing_inputs,
+                bands,
+                n_lhs=_N_LHS,
+                mc_paths=_MC_PATHS,
+                seed=_SEED,
+            )
     except Exception as exc:
         logger.exception("fair value computation failed")
         raise HTTPException(status_code=500, detail=f"pricing error: {exc}")

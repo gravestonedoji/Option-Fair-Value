@@ -87,6 +87,51 @@ Open http://localhost:5173.
 
 (Stops both servers with `.\stop-dev.ps1`, or close the windows.)
 
+## Remote access with Tailscale
+
+The dashboard can be reached from your phone/laptop anywhere via
+[Tailscale](https://tailscale.com), without exposing anything to the public
+internet. All API calls are same-origin (the Vite dev server proxies them;
+in production the backend serves the frontend), so no CORS or base-URL
+changes are needed — pick whichever option fits:
+
+### Option A — serve the dev setup from this machine (simplest)
+
+With Tailscale installed and signed in on this PC:
+
+```powershell
+.\start-dev.bat            # backend + frontend as usual
+.\serve-tailscale.bat      # HTTPS-serves the dashboard (port 5173) on your tailnet
+```
+
+Open the printed `https://<machine>.<tailnet>.ts.net` URL from any device
+on your tailnet. Stop with `.\serve-tailscale.bat off`. To serve a
+production build instead (backend serving `frontend/dist` on port 8000):
+`.\serve-tailscale.bat 8000`.
+
+`tailscale serve` needs MagicDNS + HTTPS certificates enabled for your
+tailnet (admin console → DNS).
+
+Direct access without `serve` also works: the Vite dev server listens on
+all interfaces, so `http://<tailscale-ip>:5173` from another tailnet device
+is fine too (plain HTTP).
+
+### Option B — Docker with a Tailscale sidecar (always-on)
+
+`docker-compose.yml` runs the app joined to your tailnet as its own machine
+named `option-fair-value`, served over HTTPS:
+
+```powershell
+copy .env.example .env     # set TS_AUTHKEY (and FRED_API_KEY)
+docker compose up -d --build
+```
+
+Then open `https://option-fair-value.<your-tailnet>.ts.net`. The app is
+reachable *only* through the tailnet — no ports are published to the host,
+LAN, or internet. The auth key comes from
+https://login.tailscale.com/admin/settings/keys; the serve config lives in
+[tailscale/serve.json](tailscale/serve.json).
+
 ## API
 
 | Method | Path | Body / Query | Returns |

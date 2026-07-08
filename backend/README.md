@@ -10,6 +10,9 @@ This package contains ONLY the pricing math + tests:
 - Monte Carlo (European with antithetic variates; American via Longstaff-Schwartz)
 - Finite-difference Greeks wrapper
 - Fair-value range engine (Latin-hypercube sampling across vol/spot/rate/T, all three models)
+- Black-76 pricer + implied-vol solver (`app/pricing/implied_vol.py`)
+- IV relative-value analysis (`app/analysis/`): parity-implied forward, robust
+  smile fit, rich/cheap flagging with liquidity + price-materiality gates
 
 It does NOT include the FastAPI app, data layer, or frontend. Other agents own those.
 
@@ -42,6 +45,35 @@ pip install -e ".[dev]"
 ```
 pytest -v
 ```
+
+## IV mispricing analysis
+
+`GET /analysis/{symbol}?expiry=YYYY-MM-DD` screens one expiry's chain for
+relative-value outliers: it infers the implied forward from put-call parity,
+solves Black-76 IVs from OTM mids (Yahoo's IV column is display-only fallback),
+fits a robust vega-weighted quadratic smile in log-moneyness within a
+±4-stdev moneyness band, and flags contracts whose IV sits ≥ 2 robust sigmas
+off the fit — gated on liquidity (bid > 0, spread ≤ 25%, OI/volume minimums)
+and price materiality (fitted value outside the quoted bid-ask). Optional
+query params: `z_threshold`, `max_rel_spread`, `min_open_interest`,
+`min_volume`. Flags are screening signals on ~15-min-delayed data, not
+arbitrage.
+
+If FRED is not configured the endpoint uses `OFV_FALLBACK_RATE` (default
+`0.04`) instead of failing, and reports `rate_source: "fallback"`.
+
+## Background mispricing scanner
+
+With `OFV_SCANNER_ENABLED=1`, a background task sweeps `OFV_SCANNER_WATCHLIST`
+(default `SPY,QQQ,AAPL,NVDA`) across up to `OFV_SCANNER_MAX_EXPIRIES` near
+expiries every `OFV_SCANNER_INTERVAL` seconds during US market hours, running
+the same analysis as `/analysis`. A contract becomes an **active alert** only
+after staying flagged for `OFV_SCANNER_PERSISTENCE` consecutive sweeps
+(filters one-tick quote glitches); alerts resolve automatically when the
+contract prices back onto its smile. State survives restarts via the cache.
+
+* `GET /alerts` — active/pending/resolved alerts + scanner status
+* `POST /alerts/scan` — run a sweep immediately (works after hours too)
 
 ## Input contract
 

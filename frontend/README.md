@@ -29,15 +29,19 @@ npm run dev            # starts Vite on http://localhost:5173
 
 ## Environment
 
-| Variable             | Default                  | Description                      |
-| -------------------- | ------------------------ | -------------------------------- |
-| `VITE_API_BASE_URL`  | `http://localhost:8000`  | Backend API base URL             |
+| Variable             | Default            | Description                                                        |
+| -------------------- | ------------------ | ------------------------------------------------------------------ |
+| `VITE_API_BASE_URL`  | *(unset → same-origin)* | Only set for split deploys where the API lives on another host |
 
 ## Dev server proxy
 
-The Vite dev server proxies `/api`, `/expiries`, `/chain`, and `/fairvalue`
-to `http://localhost:8000` so the frontend can call the backend directly
-without CORS issues.
+The Vite dev server proxies all API routes (`/api`, `/expiries`, `/chain`,
+`/fairvalue`, `/analysis`, `/alerts`, `/health`) to `http://localhost:8000`,
+so API calls are same-origin and work without CORS from localhost, LAN, or
+Tailscale. The server listens on all interfaces (`host: true`) and allows
+this machine's hostname (e.g. `http://<hostname>:5173` via MagicDNS) plus
+`*.ts.net` names so it can be reached over a tailnet (see the root README's
+"Remote access with Tailscale").
 
 ## API contract
 

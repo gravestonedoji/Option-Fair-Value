@@ -8,6 +8,9 @@ __pycache__/
 *.py[cod]
 *.egg-info/
 .pytest_cache/
+.coverage
+.coverage.*
+htmlcov/
 .venv/
 venv/
 .mypy_cache/
@@ -21,6 +24,7 @@ dist/
 # Dev tooling / internal notes
 opencode.json
 summary.md
+.claude/
 
 # OS
 .DS_Store

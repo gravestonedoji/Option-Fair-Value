@@ -21,12 +21,30 @@ from typing import Any, Optional
 
 logger = logging.getLogger("app.data.cache")
 
-# --- TTL policy (seconds) ----------------------------------------------------
-TTL_QUOTES = 60          # option quotes / chain rows
-TTL_EXPIRIES = 86400     # list of expiries for a symbol (24h)
-TTL_RATE = 3600          # risk-free rate (1h)
+def _env_int(name: str, default: int) -> int:
+    raw = os.environ.get(name)
+    if raw is None:
+        return default
+    try:
+        return int(raw)
+    except ValueError:
+        logger.warning("Ignoring non-integer %s=%r; using %d", name, raw, default)
+        return default
 
-DEFAULT_DB_PATH = Path.home() / ".option_fair_value" / "cache.sqlite"
+
+# --- TTL policy (seconds) ----------------------------------------------------
+# Defaults suit local use; for a public deployment raise OFV_TTL_QUOTES (e.g.
+# 300+) so each unique chain hits Yahoo once regardless of user count.
+TTL_QUOTES = _env_int("OFV_TTL_QUOTES", 60)        # option quotes / chain rows
+TTL_EXPIRIES = _env_int("OFV_TTL_EXPIRIES", 86400)  # expiries per symbol (24h)
+TTL_RATE = _env_int("OFV_TTL_RATE", 3600)           # risk-free rate (1h)
+
+_env_db_path = os.environ.get("OFV_CACHE_PATH")
+DEFAULT_DB_PATH = (
+    Path(_env_db_path)
+    if _env_db_path
+    else Path.home() / ".option_fair_value" / "cache.sqlite"
+)
 
 _SCHEMA_PATH = Path(__file__).resolve().parent / "schema.sql"
 
@@ -42,6 +60,18 @@ def make_expiries_key(symbol: str) -> str:
 
 def make_rate_key() -> str:
     return "rate:risk_free"
+
+
+def make_scanner_state_key() -> str:
+    return "scanner:alerts_state"
+
+
+def make_analysis_key(
+    symbol: str, expiry_iso: str, chain_cached_at_iso: str, param_sig: str
+) -> str:
+    # Keyed on the chain snapshot's timestamp so the analysis invalidates the
+    # moment the underlying chain refreshes.
+    return f"analysis:{symbol.upper()}:{expiry_iso}:{chain_cached_at_iso}:{param_sig}"
 
 
 # --- Helpers -----------------------------------------------------------------

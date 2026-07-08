@@ -17,6 +17,7 @@ dependencies = [
     "httpx>=0.27",
     "pandas>=2.0",
     "python-dotenv>=1.0",
+    "slowapi>=0.1.9",
 ]
 
 [project.optional-dependencies]
@@ -28,7 +29,7 @@ dev = [
 ]
 
 [tool.setuptools]
-packages = ["app", "app.pricing", "app.data", "app.api"]
+packages = ["app", "app.pricing", "app.data", "app.api", "app.analysis"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

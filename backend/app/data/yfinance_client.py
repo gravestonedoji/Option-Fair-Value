@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import math
 from datetime import date, datetime, timezone
 from typing import Any, Optional
 
@@ -36,7 +37,9 @@ def _get_spot(ticker: Any) -> float:
     try:
         hist = ticker.history(period="1d")
         if hist is not None and not hist.empty and "Close" in hist.columns:
-            return float(hist["Close"].iloc[-1])
+            close = float(hist["Close"].iloc[-1])
+            if math.isfinite(close) and close > 0:
+                return close
     except Exception:  # noqa: BLE001
         pass
     raise DataError("Could not determine spot price")

@@ -1,5 +1,12 @@
+import { useMemo } from "react";
 import clsx from "clsx";
-import type { OptionChain, OptionQuote, OptionType } from "../types";
+import type {
+  ChainAnalysis,
+  ContractAnalysis,
+  OptionChain,
+  OptionQuote,
+  OptionType,
+} from "../types";
 import { ChainCell } from "./ChainCell";
 
 interface Props {
@@ -7,6 +14,16 @@ interface Props {
   selectedStrike: number | null;
   selectedType: OptionType | null;
   onSelect: (strike: number, type: OptionType, quote: OptionQuote) => void;
+  analysis?: ChainAnalysis | null;
+}
+
+function flagTitle(c: ContractAnalysis): string {
+  const z = c.z === null ? "" : ` · z=${c.z >= 0 ? "+" : ""}${c.z.toFixed(1)}`;
+  const ivs =
+    c.fitted_iv !== null && c.iv !== null
+      ? ` · fit ${(c.fitted_iv * 100).toFixed(1)}% vs mkt ${(c.iv * 100).toFixed(1)}%`
+      : "";
+  return `${c.verdict}${z}${ivs}`;
 }
 
 const fmtPrice = (v: number) => v.toFixed(2);
@@ -31,8 +48,18 @@ export function OptionsChain({
   selectedStrike,
   selectedType,
   onSelect,
+  analysis,
 }: Props) {
   const atmIdx = nearestStrikeIndex(chain.rows, chain.spot);
+
+  // Only contracts with a verdict get a visual flag in the table.
+  const flagged = useMemo(() => {
+    const map = new Map<string, ContractAnalysis>();
+    for (const c of analysis?.contracts ?? []) {
+      if (c.verdict !== null) map.set(`${c.type}:${c.strike}`, c);
+    }
+    return map;
+  }, [analysis]);
 
   return (
     <div className="flex h-full flex-col overflow-hidden rounded-lg border border-slate-800 bg-slate-900">
@@ -80,6 +107,8 @@ export function OptionsChain({
                 selectedStrike === row.strike && selectedType === "call";
               const putSelected =
                 selectedStrike === row.strike && selectedType === "put";
+              const callFlag = flagged.get(`call:${row.strike}`);
+              const putFlag = flagged.get(`put:${row.strike}`);
 
               return (
                 <tr
@@ -110,6 +139,8 @@ export function OptionsChain({
                     onClick={() => onSelect(row.strike, "call", row.call)}
                     isSelected={callSelected}
                     isITM={row.call.in_the_money ?? false}
+                    flag={callFlag?.verdict ?? null}
+                    flagTitle={callFlag ? flagTitle(callFlag) : undefined}
                   />
                   <ChainCell
                     value={row.call.iv}
@@ -117,6 +148,8 @@ export function OptionsChain({
                     onClick={() => onSelect(row.strike, "call", row.call)}
                     isSelected={callSelected}
                     isITM={row.call.in_the_money ?? false}
+                    flag={callFlag?.verdict ?? null}
+                    flagTitle={callFlag ? flagTitle(callFlag) : undefined}
                   />
                   <ChainCell
                     value={row.call.open_interest}
@@ -156,6 +189,8 @@ export function OptionsChain({
                     onClick={() => onSelect(row.strike, "put", row.put)}
                     isSelected={putSelected}
                     isITM={row.put.in_the_money ?? false}
+                    flag={putFlag?.verdict ?? null}
+                    flagTitle={putFlag ? flagTitle(putFlag) : undefined}
                   />
                   <ChainCell
                     value={row.put.iv}
@@ -163,6 +198,8 @@ export function OptionsChain({
                     onClick={() => onSelect(row.strike, "put", row.put)}
                     isSelected={putSelected}
                     isITM={row.put.in_the_money ?? false}
+                    flag={putFlag?.verdict ?? null}
+                    flagTitle={putFlag ? flagTitle(putFlag) : undefined}
                   />
                   <ChainCell
                     value={row.put.open_interest}

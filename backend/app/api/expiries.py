@@ -5,12 +5,14 @@ from fastapi import APIRouter, HTTPException, Request
 from app.data.models import DataError
 from app.data.yfinance_client import YFinanceClient
 
+from .limits import RATE_LIMIT_DATA, limiter
 from .schemas import Expiries
 
 router = APIRouter(tags=["expiries"])
 
 
 @router.get("/expiries/{symbol}", response_model=Expiries)
+@limiter.limit(RATE_LIMIT_DATA)
 async def get_expiries(symbol: str, request: Request) -> Expiries:
     symbol = symbol.upper().strip()
     client: YFinanceClient = request.app.state.yfinance

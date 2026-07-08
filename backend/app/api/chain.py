@@ -7,12 +7,14 @@ from fastapi import APIRouter, HTTPException, Query, Request
 from app.data.models import DataError
 from app.data.yfinance_client import YFinanceClient
 
+from .limits import RATE_LIMIT_DATA, limiter
 from .schemas import OptionChain
 
 router = APIRouter(tags=["chain"])
 
 
 @router.get("/chain/{symbol}", response_model=OptionChain)
+@limiter.limit(RATE_LIMIT_DATA)
 async def get_chain(
     symbol: str,
     request: Request,

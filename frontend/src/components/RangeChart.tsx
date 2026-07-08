@@ -1,3 +1,4 @@
+import type { ReactNode } from "react";
 import type { FairValueRange, ModelRange } from "../types";
 
 interface Props {
@@ -24,6 +25,15 @@ const MODEL_DOT: Record<string, string> = {
   line_monte_carlo: "bg-amber-500/50",
 };
 
+// Track column geometry shared by the rows, the market-line overlay, and the
+// axis: w-24 label (6rem) + gap-2 (0.5rem) on the left, gap-2 + w-14 value
+// (3.5rem) on the right. The overlay must use the same insets as the flex
+// rows or the pct() coordinates land in the wrong place.
+const TRACK_INSET_LEFT = "6.5rem";
+const TRACK_INSET_RIGHT = "4rem";
+const ROW_H = 24; // h-6
+const ROW_GAP = 8; // gap-2
+
 export function RangeChart({ range, marketBid, marketAsk }: Props) {
   const models = Object.values(range.models) as ModelRange[];
 
@@ -38,15 +48,23 @@ export function RangeChart({ range, marketBid, marketAsk }: Props) {
     xMin = 0;
     xMax = 1;
   }
+  const allNonNegative = xMin >= 0;
   const pad = (xMax - xMin) * 0.05;
   xMin -= pad;
   xMax += pad;
+  // Option prices can't be negative; don't let edge padding fake a "-0.2" axis.
+  if (allNonNegative && xMin < 0) xMin = 0;
   const span = xMax - xMin;
 
   const pct = (v: number) => ((v - xMin) / span) * 100;
+  const tickDecimals = span >= 20 ? 0 : span >= 2 ? 1 : 2;
 
   const ticks = 5;
   const tickVals = Array.from({ length: ticks + 1 }, (_, i) => xMin + (span * i) / ticks);
+
+  const rowsH = models.length * ROW_H + (models.length - 1) * ROW_GAP;
+  const bidPos = marketBid !== null ? pct(marketBid) : null;
+  const askPos = marketAsk !== null ? pct(marketAsk) : null;
 
   return (
     <div className="rounded-md border border-slate-800 bg-slate-950/40 p-3">
@@ -54,26 +72,32 @@ export function RangeChart({ range, marketBid, marketAsk }: Props) {
         Fair Value Range (min · P5 · median · P95 · max)
       </h3>
 
-      <div className="relative">
-        {/* market bid/ask vertical lines spanning all rows */}
-        {marketBid !== null && (
-          <MarketLine
-            pos={pct(marketBid)}
-            color="border-emerald-400 text-emerald-400"
-            label={`bid ${marketBid.toFixed(2)}`}
-            rowCount={models.length}
-            labelSide="left"
+      {/* pt-4 reserves a lane above the rows for the bid/ask labels */}
+      <div className="relative pt-4">
+        {/* market bid/ask overlay, aligned to the track columns */}
+        <div
+          className="pointer-events-none absolute top-4 z-10"
+          style={{ left: TRACK_INSET_LEFT, right: TRACK_INSET_RIGHT, height: rowsH }}
+        >
+          {bidPos !== null && (
+            <div
+              className="absolute inset-y-0 border-l border-dashed border-emerald-400/80"
+              style={{ left: `${bidPos}%` }}
+            />
+          )}
+          {askPos !== null && (
+            <div
+              className="absolute inset-y-0 border-l border-dashed border-rose-400/80"
+              style={{ left: `${askPos}%` }}
+            />
+          )}
+          <MarketLabels
+            marketBid={marketBid}
+            marketAsk={marketAsk}
+            bidPos={bidPos}
+            askPos={askPos}
           />
-        )}
-        {marketAsk !== null && (
-          <MarketLine
-            pos={pct(marketAsk)}
-            color="border-rose-400 text-rose-400"
-            label={`ask ${marketAsk.toFixed(2)}`}
-            rowCount={models.length}
-            labelSide="right"
-          />
-        )}
+        </div>
 
         <div className="flex flex-col gap-2">
           {models.map((m) => {
@@ -127,10 +151,12 @@ export function RangeChart({ range, marketBid, marketAsk }: Props) {
             {tickVals.map((t, i) => (
               <span
                 key={i}
-                className="absolute -translate-x-1/2 font-mono text-[10px] text-slate-600"
+                className={`absolute font-mono text-[10px] text-slate-600 ${
+                  i === 0 ? "" : i === ticks ? "-translate-x-full" : "-translate-x-1/2"
+                }`}
                 style={{ left: `${pct(t)}%` }}
               >
-                {t.toFixed(1)}
+                {t.toFixed(tickDecimals)}
               </span>
             ))}
           </div>
@@ -149,35 +175,59 @@ export function RangeChart({ range, marketBid, marketAsk }: Props) {
   );
 }
 
-function MarketLine({
-  pos,
-  color,
-  label,
-  rowCount,
-  labelSide = "right",
+// Bid/ask spreads are usually narrow relative to the fair-value span, so the
+// two labels would collide most of the time; merge them into one pill when
+// the lines are close, and keep every variant clamped inside the track so
+// labels never spill over the model names on the left.
+function MarketLabels({
+  marketBid,
+  marketAsk,
+  bidPos,
+  askPos,
 }: {
-  pos: number;
-  color: string;
-  label: string;
-  rowCount: number;
-  labelSide?: "left" | "right";
+  marketBid: number | null;
+  marketAsk: number | null;
+  bidPos: number | null;
+  askPos: number | null;
 }) {
-  const rowH = 24;
-  const gap = 8;
-  const totalH = rowCount * rowH + (rowCount - 1) * gap;
-  const labelClass =
-    labelSide === "left"
-      ? "absolute -top-4 right-1 whitespace-nowrap text-[9px]"
-      : "absolute -top-4 left-1 whitespace-nowrap text-[9px]";
+  const bidSpan =
+    marketBid !== null ? (
+      <span className="text-emerald-400">bid {marketBid.toFixed(2)}</span>
+    ) : null;
+  const askSpan =
+    marketAsk !== null ? (
+      <span className="text-rose-400">ask {marketAsk.toFixed(2)}</span>
+    ) : null;
+
+  if (bidPos !== null && askPos !== null && Math.abs(askPos - bidPos) < 15) {
+    const mid = (bidPos + askPos) / 2;
+    return (
+      <FloatingLabel pos={mid}>
+        {bidSpan}
+        <span className="text-slate-600"> · </span>
+        {askSpan}
+      </FloatingLabel>
+    );
+  }
   return (
-    <div
-      className={`pointer-events-none absolute z-10 border-l border-dashed ${color}`}
-      style={{ left: `${pos}%`, top: 0, height: totalH }}
+    <>
+      {bidPos !== null && <FloatingLabel pos={bidPos}>{bidSpan}</FloatingLabel>}
+      {askPos !== null && <FloatingLabel pos={askPos}>{askSpan}</FloatingLabel>}
+    </>
+  );
+}
+
+function FloatingLabel({ pos, children }: { pos: number; children: ReactNode }) {
+  // Near the edges, anchor the label so it grows inward instead of clipping.
+  const align =
+    pos < 15 ? "" : pos > 85 ? "-translate-x-full" : "-translate-x-1/2";
+  return (
+    <span
+      className={`absolute -top-4 whitespace-nowrap text-[9px] ${align}`}
+      style={{ left: `${pos}%` }}
     >
-      <span className={`${labelClass} ${color.split(" ")[1]}`}>
-        {label}
-      </span>
-    </div>
+      {children}
+    </span>
   );
 }
 
